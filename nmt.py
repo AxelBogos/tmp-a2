@@ -241,7 +241,7 @@ class NMT(nn.Module):
 
         ### WRITE YOUR CODE HERE (~7 Lines)
         # Step 1
-        src_word_embeds = self.src_embedding(src_sents_var)
+        src_word_embeds = self.src_embed(src_sents_var)
 
         # Step 2
         src_word_embeds = pack_padded_sequence(src_word_embeds, src_sent_lens)
