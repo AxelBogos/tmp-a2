@@ -247,7 +247,7 @@ class NMT(nn.Module):
         src_word_embeds = pack_padded_sequence(src_word_embeds, src_sent_lens)
         enc_hiddens, (last_state, last_cell) = self.encoder_lstm(src_word_embeds)
         src_encodings, _ = pad_packed_sequence(enc_hiddens, batch_first=True)
-        src_encodings = src_encodings.permute(1, 0, 2)
+        #src_encodings = src_encodings.permute(1, 0, 2)
 
         # Step 3
         h_n_cat = torch.cat((last_state[0], last_state[1]), dim=1)
