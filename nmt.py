@@ -39,7 +39,6 @@ Options:
 """
 
 import math
-import pickle
 import sys
 import time
 from collections import namedtuple
@@ -124,7 +123,7 @@ class NMT(nn.Module):
         self.decoder_lstm = nn.LSTMCell(input_size=embed_size + hidden_size if input_feed else embed_size,
                                         hidden_size=hidden_size)
         self.att_src_linear = nn.Linear(in_features=2 * hidden_size, out_features=hidden_size, bias=False)
-        self.att_vec_linear = nn.Linear(in_features=hidden_size*2+hidden_size, out_features=hidden_size, bias=False)
+        self.att_vec_linear = nn.Linear(in_features=hidden_size * 2 + hidden_size, out_features=hidden_size, bias=False)
         self.readout = nn.Linear(in_features=hidden_size, out_features=len(vocab.tgt), bias=False)
         self.dropout = nn.Dropout(dropout_rate)
         self.decoder_cell_init = nn.Linear(in_features=2 * hidden_size, out_features=hidden_size, bias=True)
@@ -247,7 +246,7 @@ class NMT(nn.Module):
         src_word_embeds = pack_padded_sequence(src_word_embeds, src_sent_lens)
         enc_hiddens, (last_state, last_cell) = self.encoder_lstm(src_word_embeds)
         src_encodings, _ = pad_packed_sequence(enc_hiddens, batch_first=True)
-        #src_encodings = src_encodings.permute(1, 0, 2)
+        # src_encodings = src_encodings.permute(1, 0, 2)
 
         # Step 3
         h_n_cat = torch.cat((last_state[0], last_state[1]), dim=1)
@@ -369,7 +368,7 @@ class NMT(nn.Module):
         ### WRITE YOUR CODE HERE (~4 Lines)
 
         # Step 1
-        h_t, cell_t = self.decoder(x, h_tm1)
+        h_t, cell_t = self.decoder_lstm(x, h_tm1)
 
         # Step 2
         ctx_t, alpha_t = self.dot_prod_attention(h_t, src_encodings, src_encoding_att_linear, src_sent_masks)
@@ -683,7 +682,7 @@ def evaluate_ppl(model, dev_data, batch_size=32):
             # Note: Remember to omit corresponding term for the leading '<s>'.
 
             # sum of len of each sentence -1 for <s>
-            tgt_word_num_to_predict = sum([len(s)-1 for s in tgt_sents])
+            tgt_word_num_to_predict = sum([len(s) - 1 for s in tgt_sents])
             cum_tgt_words += tgt_word_num_to_predict
         # From lecture 03 slide 49
         ppl = np.exp(cum_loss / cum_tgt_words)

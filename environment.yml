@@ -10,5 +10,5 @@ dependencies:
   - ipython
   - docopt
   - pip:
-    - tqdm
-    - pytorch=1.7
+      - tqdm
+      - pytorch=1.7
