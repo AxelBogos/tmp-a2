@@ -96,8 +96,8 @@ class NMT(nn.Module):
 
         ### WRITE YOUR CODE HERE (~2 Lines)
 
-        self.src_embed = 
-        self.tgt_embed = 
+        self.src_embed = nn.Embedding(len(vocab.src), embed_size, src_pad_token_idx)
+        self.tgt_embed = nn.Embedding(len(vocab.tgt), embed_size, tgt_pad_token_idx)
 
         ### END OF YOUR CODE HERE
 
@@ -120,14 +120,15 @@ class NMT(nn.Module):
 
         ### WRITE YOUR CODE HERE (~8 Lines)
 
-        self.encoder_lstm = 
-        self.decoder_lstm = 
-        self.att_src_linear = 
-        self.att_vec_linear = 
-        self.readout = 
-        self.dropout = 
-        self.decoder_cell_init = 
-        self.decoder_state_init = 
+        self.encoder_lstm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, bias=True, bidirectional=True)
+        self.decoder_lstm = nn.LSTMCell(input_size=embed_size + hidden_size if input_feed else embed_size,
+                                        hidden_size=hidden_size)
+        self.att_src_linear = nn.Linear(in_features=2 * hidden_size, out_features=hidden_size, bias=False)
+        self.att_vec_linear = nn.Linear(in_features=hidden_size*2+hidden_size, out_features=hidden_size, bias=False)
+        self.readout = nn.Linear(in_features=hidden_size, out_features=len(vocab.tgt), bias=False)
+        self.dropout = nn.Dropout(dropout_rate)
+        self.decoder_cell_init = nn.Linear(in_features=2 * hidden_size, out_features=hidden_size, bias=True)
+        self.decoder_state_init = nn.Linear(in_features=2 * hidden_size, out_features=hidden_size, bias=True)
 
         ### END OF YOUR CODE HERE
 
@@ -239,7 +240,20 @@ class NMT(nn.Module):
         """
 
         ### WRITE YOUR CODE HERE (~7 Lines)
+        # Step 1
+        src_word_embeds = self.src_embedding(src_sents_var)
 
+        # Step 2
+        src_word_embeds = pack_padded_sequence(src_word_embeds, src_sent_lens)
+        enc_hiddens, (last_state, last_cell) = self.encoder_lstm(src_word_embeds)
+        src_encodings, _ = pad_packed_sequence(enc_hiddens, batch_first=True)
+        src_encodings = src_encodings.permute(1, 0, 2)
+
+        # Step 3
+        h_n_cat = torch.cat((last_state[0], last_state[1]), dim=1)
+        c_n_cat = torch.cat((last_cell[0], last_cell[1]), dim=1)
+        dec_init_state = self.decoder_state_init(h_n_cat)
+        dec_init_cell = self.decoder_cell_init(c_n_cat)
 
         ### END OF YOUR CODE HERE
 
@@ -287,7 +301,32 @@ class NMT(nn.Module):
         att_ves = []
 
         ### WRITE YOUR CODE HERE (~13 Lines)
+        # Step 1
+        src_encoding_att_linear = self.att_src_linear(src_encodings)
 
+        # Step 2
+        tgt_word_embeds = self.tgt_embed(tgt_sents_var)
+
+        # Step 3
+        for y_tm1_embed in torch.split(tgt_word_embeds, 1, dim=0):
+            # squeeze from (1, batch size, embedding size) to (batch size, embedding size).
+            y_tm1_embed = torch.squeeze(y_tm1_embed, dim=0)
+
+            # if input feed we concat with att_tm1
+            if self.input_feeding:
+                x = torch.cat([y_tm1_embed, att_tm1], dim=1)
+            else:
+                x = y_tm1_embed
+
+            (h_t, cell_t), att_t, alpha_t = self.step(x, h_tm1, src_encodings, src_encoding_att_linear, src_sent_masks)
+
+            # Append and update
+            att_ves.append(att_t)
+            att_tm1 = att_t
+            h_tm1 = (h_t, cell_t)
+
+        # Step 4
+        att_ves = torch.stack(att_ves)
 
         ### END OF YOUR CODE HERE
 
@@ -329,6 +368,18 @@ class NMT(nn.Module):
 
         ### WRITE YOUR CODE HERE (~4 Lines)
 
+        # Step 1
+        h_t, cell_t = self.decoder(x, h_tm1)
+
+        # Step 2
+        ctx_t, alpha_t = self.dot_prod_attention(h_t, src_encodings, src_encoding_att_linear, src_sent_masks)
+
+        # Step 3
+        W_c = self.att_vec_linear(torch.cat([h_t, ctx_t], dim=1))
+        att_t = torch.tanh(W_c)
+
+        # Step 4
+        att_t = self.dropout(att_t)
 
         ### END OF YOUR CODE HERE
 
@@ -354,7 +405,7 @@ class NMT(nn.Module):
         """
 
         ### WRITE YOUR CODE HERE (~1 line)
-
+        att_weight = torch.bmm(src_encoding_att_linear, h_t.unsqueeze(2)).squeeze(2)
 
         ### END OF YOUR CODE HERE
 
@@ -368,7 +419,8 @@ class NMT(nn.Module):
         """
 
         ### WRITE YOUR CODE HERE (~3 lines)
-
+        softmaxed_att_weight = F.softmax(att_weight, dim=1)
+        ctx_vec = torch.bmm(softmaxed_att_weight.unsqueeze(1), src_encoding).squeeze(1)
 
         ### END OF YOUR CODE HERE
 
@@ -622,14 +674,19 @@ def evaluate_ppl(model, dev_data, batch_size=32):
 
     with torch.no_grad():
         for src_sents, tgt_sents in batch_iter(dev_data, batch_size):
-        ### WRITE YOUR CODE HERE (~5 lines)
-            loss = 
-            cum_loss = 
-            # tgt_word_num_to_predict: number of target words to predict for one batch.
+            ### WRITE YOUR CODE HERE (~5 lines)
+            # Sum loss over batch
+            loss = -model(src_sents, tgt_sents).sum()
+            # Accumulate loss
+            cum_loss += loss.item()
+            # tgt_word_num_to_predict: number of target words to predict for one batch.--
             # Note: Remember to omit corresponding term for the leading '<s>'.
-            tgt_word_num_to_predict = 
-            cum_tgt_words =
-        ppl =  
+
+            # sum of len of each sentence -1 for <s>
+            tgt_word_num_to_predict = sum([len(s)-1 for s in tgt_sents])
+            cum_tgt_words += tgt_word_num_to_predict
+        # From lecture 03 slide 49
+        ppl = np.exp(cum_loss / cum_tgt_words)
         ### END OF YOUR CODE HERE
 
     if was_training:

@@ -21,12 +21,16 @@ def input_transpose(sents, pad_token):
                                             sentence. Sentences shorter than the max length sentence are padded out with
                                             the pad_token, such that each sentences in the batch now has equal length.
     """
-
     sents_padded = []
 
     ### WRITE YOUR CODE HERE (~5 lines)
-
-
+    # Get maximum sentence length
+    max_sent_length = len(max(sents, key=len))
+    # Create list of padded lists
+    for idx, sent in enumerate(sents):
+        sents_padded[idx] = sent + pad_token*(max_sent_length-len(sent))
+    # Transpose it
+    sents_padded = np.array(sents_padded).T.tolist()
     ### END OF YOUR CODE HERE
 
     return sents_padded
