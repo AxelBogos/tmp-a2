@@ -313,7 +313,7 @@ class NMT(nn.Module):
             y_tm1_embed = torch.squeeze(y_tm1_embed, dim=0)
 
             # if input feed we concat with att_tm1
-            if self.input_feeding:
+            if self.input_feed:
                 x = torch.cat([y_tm1_embed, att_tm1], dim=1)
             else:
                 x = y_tm1_embed
